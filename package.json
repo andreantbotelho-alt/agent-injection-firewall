@@ -1,0 +1,17 @@
+{
+  "name": "agent-injection-firewall",
+  "version": "0.1.0",
+  "description": "Deterministic prompt-injection / poison / tool-poisoning firewall for LLM agents — multilingual, evasion-resistant, zero black-box ML in the hot path. OWASP LLM01 / MITRE ATLAS.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "demo": "node demo.js"
+  },
+  "keywords": [
+    "prompt-injection", "llm-security", "ai-agent", "guardrails", "owasp-llm",
+    "prompt-injection-defense", "ai-security", "llm-firewall", "agent-security", "mitre-atlas"
+  ],
+  "license": "MIT",
+  "engines": { "node": ">=18" }
+}

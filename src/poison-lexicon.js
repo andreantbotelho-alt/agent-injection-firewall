@@ -1,0 +1,80 @@
+'use strict'
+
+// poison-lexicon — FONTE ÚNICA dos padrões de veneno/injeção (DRY). Antes redefinidos em 3 arquivos
+// (audit-memory.js, hooks-scan.js, orientation.js) → risco real: um detector aprendia um padrão 2026 e os
+// outros dois ficavam cegos (drift de segurança). Agora todos importam daqui. Determinístico (só regex).
+// NB: orientation usava o `/prompt\s*injection/i` CRU (FP em lições descritivas) e sem PT-BR — ao importar
+// daqui, ganha a versão estreitada (imperativo) + cobertura PT-BR. Estritamente igual ou MAIS seguro.
+
+// Prompt-injection em linguagem natural (EN + PT-BR). Imperativo + objeto + qualificador → tight (baixo-FP).
+const INJECTION_PATTERNS = [
+  /ignore\s+(all\s+)?(previous|above|prior)\s+(instructions|messages|rules)/i,
+  /disregard\s+(all\s+)?(previous|above|prior)\s+(instructions|messages|rules)/i,
+  /override\s+(the\s+)?(system|developer|user)\s+(prompt|message|instructions)/i,
+  /reveal\s+(the\s+|your\s+)?(system|developer)\s+(prompt|message|instructions)/i,
+  /forget\s+(everything|all|what)\s+(you\s+)?(were|was|have\s+been)\s+(told|taught|instructed|said)/i,
+  /BEGIN\s+(SYSTEM|DEVELOPER)\s+PROMPT/i,
+  // require an imperative/attack context — the BARE noun "prompt injection" is descriptive (security lessons
+  // mention it) and normalizeForScan folds the hyphen, so it would FP. Only treat it as poison when ordered.
+  // NB: "do" is EXCLUDED — in PT it is the preposition "de+o" ("FP-fix do prompt injection" = descriptive),
+  // which false-flagged descriptive/educational text. The remaining verbs carry the attack detection.
+  /(?:execute|run|perform|begin|start|attempt|launch|inject(?:ing)?|this\s+is\s+an?)\s+(?:an?\s+)?prompt\s*injection/i,
+  // PT-BR: an EN-only denylist misses Portuguese injection ("Ignore todas as instruções anteriores" → []).
+  // Accent-tolerant (normalizeForScan folds accents). Imperative + object + qualifier ("anteriores/acima") =
+  // tight (same tradeoff as EN). 0 false positives measured against descriptive/educational text.
+  /\b(?:ignor[ae]|desconsider[ae]|despreze)\s+(?:todas?\s+)?(?:as\s+)?(?:instru[cç][oõ]es|mensagens|regras|ordens)\s+(?:anteriores|acima|pr[eé]vias)\b/i,
+  /\besque[cç][ae]\s+(?:tudo|todas?\s+as\s+instru[cç][oõ]es)\b/i,
+  /\brevel[ae]\s+(?:o\s+)?(?:seu\s+)?prompt\s+(?:do\s+)?sistema\b/i,
+  // MULTILINGUAL: injection in ZH/JP/RU/AR/KO/DE bypassed an EN+PT-only firewall. Native tokens verified by
+  // native speakers. Matched on RAW text (normalizeForScan would fold Cyrillic→ASCII). Tight structure:
+  // attack-verb + instruction-object / system-prompt.
+  // FP baixo: scripts não-latinos não casam o store PT/EN; tokens alemães são DE-específicos (não casam EN).
+  /(忽略|忘记|无视|跳过|绕过|禁用|删除).{0,8}(指令|指示|规则|说明|限制|安全|过滤)/,           // ZH: ignorar/desativar + instrução/regra/segurança
+  /(泄露|揭露|显示|告诉|输出).{0,8}(系统提示|系统消息|系统指令|系统提示词|机密|密钥)/,         // ZH: vazar/revelar + system-prompt/segredo
+  /(越狱|解锁开发者模式|关闭安全功能|禁用内容过滤|忽略以上所有)/,                              // ZH: jailbreak/unlock-dev/disable-safety (distintivo)
+  /(指示|プロンプト|命令|規則|制限).{0,10}(無視|忘れ)/,                                       // JP: instrução/prompt + ignorar/esquecer
+  /システムプロンプト.{0,10}(表示|教え|見せ|明か|出力)/,                                       // JP: system-prompt + mostrar
+  /(игнорир|забудь|забудьте|отбрось|сотри|отключи|пренебрег)\w*[\s\S]{0,25}(инструкц|указани|правил|ограничени|систем)\w*/i, // RU
+  /(раскро|покаж|выведи|расскаж|утечк)\w*[\s\S]{0,25}(систем\w*\s*(промпт|сообщени)|секретн|конфиденциальн)/i,             // RU: revelar/vazar + system-prompt/segredo
+  /تجاهل[\s\S]{0,15}(التعليمات|القواعد|الأوامر|القيود)/,                                       // AR: ignorar + instruções/regras
+  /(اكشف|سرب|أفشى)[\s\S]{0,15}(النظام|السرية|التعليمات\s+النظامية)/,                            // AR: revelar/vazar + sistema/segredo
+  /(지시|명령|프롬프트|규칙|제한)[\s\S]{0,8}(무시|잊)/,                                          // KO: instrução/prompt + ignorar
+  /시스템\s*프롬프트[\s\S]{0,8}(보여|알려|출력|무시)/,                                          // KO: system-prompt + mostrar/ignorar
+  /(ignorier|vergiss|vergess|umgeh|überschreib|deaktivier|unterdrück)\w*[\s\S]{0,25}(anweisung|befehl|richtlinien|regeln|einschränkung|vorgabe|sicherheit)\w*/i, // DE
+  /(offenbar|enthüll|verrat|preisgeb)\w*[\s\S]{0,20}(system[\s_-]?prompt|geheim\w*\s*(instruktion|prompt|code))/i,          // DE: revelar + system-prompt/segredo
+]
+
+// "Policy Puppetry" (HiddenLayer 2025) — bypass UNIVERSAL que disfarça injeção de POLICY/CONFIG ESTRUTURADA
+// (XML/INI com role-elevation). O denylist NL não pega. Conservador: assinaturas estruturais específicas.
+const POLICY_PUPPETRY_PATTERNS = [
+  /interaction[-_]*config/i,                                                 // assinatura-mor do ataque PP
+  /(allowed|blocked)[-_]*(modes|strings|responses|words|topics)/i,           // blocos de policy do PP
+  /<\s*(role|persona)\s*>\s*(system|developer|administrator|admin)\s*<\s*\/\s*(role|persona)\s*>/i, // role-elevation
+  /<\s*\/?\s*(system|developer)[-_]?(prompt|instructions?)\s*>/i,            // <system-prompt>/<developer-instructions>
+]
+
+// Tool-poisoning (hooks/config): instrução escondida que silencia o usuário ou força exec/exfil de segredo.
+const TOOL_POISON_PATTERNS = [
+  /do\s+not\s+(tell|inform|mention|notify)\s+(the\s+)?user/i,
+  /never\s+(tell|inform|mention|notify)\s+(the\s+)?user/i,
+  /always\s+(run|execute|call)\s+(this\s+)?(command|tool|script|shell)/i,
+  /curl\s+[^\n]*\$\{?(API_KEY|TOKEN|SECRET|PASSWORD)/i,
+  /wget\s+[^\n]*\$\{?(API_KEY|TOKEN|SECRET|PASSWORD)/i,
+  /exfiltrat/i,
+  /(?:execute|run|perform|begin|start|attempt|launch|inject(?:ing)?|this\s+is\s+an?)\s+(?:an?\s+)?tool\s*poison/i,
+]
+
+// Exfiltração semântica: instrução em prosa pra MANDAR segredo a um destino EXTERNO. Exige os TRÊS sinais
+// juntos (verbo-de-vazamento + objeto-segredo + destino-externo). Medido 0 FP / 2 TP no store vivo.
+const EXFIL_LEAK_VERB = /(vaz[ae]r?|exfiltr\w*|\bleak\b|\bbeacon\b|envi[ae]r?|\bmand[ae]r?\b|\bupload\b|\bpost\b|\bsend\b|transmit\w*)/i
+const EXFIL_SECRET_OBJ = /(segredos?|secrets?|credenci\w+|credentials?|api[\s_-]*keys?|\btokens?\b|senhas?|passwords?|\.env\b|private[\s_-]*keys?|environment[\s_-]*vari\w+|env[\s_-]*(?:file|vars?)\b)/i
+const EXFIL_EXTERNAL_DEST = /(https?:\/\/|\b\d{1,3}(?:\.\d{1,3}){3}\b)/i
+
+module.exports = {
+  INJECTION_PATTERNS,
+  POLICY_PUPPETRY_PATTERNS,
+  TOOL_POISON_PATTERNS,
+  EXFIL_LEAK_VERB,
+  EXFIL_SECRET_OBJ,
+  EXFIL_EXTERNAL_DEST,
+}
