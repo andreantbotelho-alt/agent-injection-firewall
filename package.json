@@ -12,6 +12,10 @@
     "prompt-injection", "llm-security", "ai-agent", "guardrails", "owasp-llm",
     "prompt-injection-defense", "ai-security", "llm-firewall", "agent-security", "mitre-atlas"
   ],
+  "author": "André Antônio Botelho Fernandes",
+  "repository": { "type": "git", "url": "git+https://github.com/andreantbotelho-alt/agent-injection-firewall.git" },
+  "homepage": "https://github.com/andreantbotelho-alt/agent-injection-firewall#readme",
+  "bugs": { "url": "https://github.com/andreantbotelho-alt/agent-injection-firewall/issues" },
   "license": "MIT",
   "engines": { "node": ">=18" }
 }
