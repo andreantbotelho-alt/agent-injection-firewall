@@ -70,6 +70,72 @@ const EXFIL_LEAK_VERB = /(vaz[ae]r?|exfiltr\w*|\bleak\b|\bbeacon\b|envi[ae]r?|\b
 const EXFIL_SECRET_OBJ = /(segredos?|secrets?|credenci\w+|credentials?|api[\s_-]*keys?|\btokens?\b|senhas?|passwords?|\.env\b|private[\s_-]*keys?|environment[\s_-]*vari\w+|env[\s_-]*(?:file|vars?)\b)/i
 const EXFIL_EXTERNAL_DEST = /(https?:\/\/|\b\d{1,3}(?:\.\d{1,3}){3}\b)/i
 
+// ============================================================================
+// MAGNUM v0.2 — classes que o red-team (workflow wp40k4cbj) PROVOU abertas (scan() rodado de verdade).
+// Tight/co-ocorrencia pra manter baixo-FP (o mesmo red-team trouxe os benignos que NAO podem bloquear).
+// ============================================================================
+
+// Jailbreak / persona / mode-switch (DAN/STAN/AIM, "do anything now", god/sudo mode). EN+PT.
+const JAILBREAK_PATTERNS = [
+  /\b(?:you\s+are\s+(?:now\s+)?|act\s+as|pretend\s+(?:to\s+be|you'?re)|become|roleplay\s+as)\s+(?:dan|stan|aim|dude|jailbreak)\b/i,
+  /\bdo\s+anything\s+now\b/i,                                              // assinatura DAN
+  /\b(?:has|have|i\s+have|you\s+have)\s+broken\s+free\s+(?:of|from)\b/i,   // "DAN has broken free of..."
+  /\b(?:enable|activate|turn\s+on|enter|switch\s+to)\s+(?:the\s+)?(?:god|sudo|jailbreak|dan|unrestricted)\s+mode\b/i,
+  /\b(?:ativ[ae]r?|habilit[ae]r?|entr[ae]r?\s+(?:no|em))\s+(?:o\s+)?modo\s+(?:deus|irrestrito|jailbreak|sem\s+filtros?)\b/i,
+]
+
+// "sem restricoes/filtros/regras" = NUCLEO do roleplay-jailbreak. Combina com um LEAD de virada (anti-FP).
+const NO_RULES_SIGNAL = /\b(?:no|without|free\s+of|free\s+from|sem|nenhum[ao]s?)\s+(?:\w+\s+){0,2}(?:restrictions?|filters?|rules?|limits?|guidelines?|policies|policy|censorship|morals?|ethics?|ethical\s+guidelines?|restri[cç][oõ]es|filtros?|regras?|limites?|diretrizes|censura|[eé]tica|moral)\b/i
+const ROLE_LEAD_SIGNAL = /\b(?:act\s+as|you\s+are|you\s+will\s+(?:act|be)|from\s+now\s+on|pretend|roleplay|behave\s+like|a\s+partir\s+de\s+agora|voc[eê]\s+(?:vai|ir[aá]|deve)|aja\s+como|finja|comporte-se)\b/i
+const DEV_MODE_SIGNAL = /\b(?:developer|dev)\s+mode\b/i // so vira ataque junto com NO_RULES_SIGNAL (anti-FP "developer mode in Chrome")
+
+// Refusal-suppression / answer-priming. EN+PT.
+const REFUSAL_PATTERNS = [
+  /\b(?:never|do\s+not|don'?t|must\s+(?:never|not))\s+(?:refuse|decline|reject)\b/i,
+  /\bnever\s+say\s+(?:you\s+)?(?:can'?t|cannot|no)\b/i,
+  /\b(?:do\s+not|don'?t)\s+say\s+(?:that\s+)?you\s+(?:can'?t|cannot)\b/i,
+  /\b(?:no|without|do\s+not\s+(?:include|add)|don'?t\s+(?:include|add))\s+(?:warnings?|disclaimers?|apolog\w+|caveats?|ethical\s+notes?)\b/i,
+  /\bnunca\s+(?:deve\s+)?(?:recus[ae]r?|negar?|negue)\b/i,
+  /\bn[aã]o\s+diga\s+que\s+(?:voc[eê]\s+)?n[aã]o\s+pode\b/i,
+]
+
+// System-prompt extraction. EN+PT.
+const EXTRACTION_PATTERNS = [
+  /\brepeat\s+(?:the\s+)?(?:words?|everything|text|all|prompt)\s+(?:above|before|that\s+came\s+before)\b/i,
+  /\bprint\s+(?:everything|all|the\s+text|the\s+words)\s+(?:above|before)\b/i,
+  /\bwhat\s+(?:are|is)\s+(?:your|the)\s+(?:exact\s+)?(?:instructions|system\s+prompt|initial\s+prompt)\b/i,
+  /\b(?:show|reveal|output|print|display)\s+(?:me\s+)?(?:your|the)\s+(?:system\s+prompt|initial\s+(?:instructions|prompt)|exact\s+instructions)\b/i,
+  /\byour\s+(?:exact|verbatim|original)\s+instructions\b/i,
+  /\bsummariz\w+\s+(?:the\s+)?instructions\s+(?:you\s+were\s+given|above|at\s+the\s+start)\b/i,
+  /\brepit[ae]\s+tudo\s+(?:acima|que\s+veio\s+antes)\b/i,
+  /\b(?:mostre?|revele?|exiba|imprima)\s+(?:o\s+)?(?:seu\s+)?prompt\s+(?:de\s+)?sistema\b/i,
+  /\bquais\s+s[aã]o\s+(?:as\s+)?suas\s+instru[cç][oõ]es\b/i,
+]
+
+// "ignore/disable/bypass + objeto de SEGURANCA" (object-gap: denylist so cobria instructions/rules). EN+PT.
+const SAFETY_BYPASS_PATTERNS = [
+  /\b(?:ignore|disregard|bypass|disable|turn\s+off|remove|override|skip)\s+(?:all\s+)?(?:the\s+)?(?:safety|content|security|moderation|ethical)\s+(?:filters?|guidelines?|guardrails?|restrictions?|measures?|controls?|policies|policy|rules?)\b/i,
+  /\b(?:ignore|disable|bypass)\s+(?:all\s+)?(?:safety\s+)?(?:filters?\s+and\s+restrictions?|restrictions?\s+and\s+filters?)\b/i,
+  /\b(?:ignor[ae]r?|desativ[ae]r?|burl[ae]r?|remov[ae]r?)\s+(?:os\s+|as\s+|todos?\s+os\s+|todas?\s+as\s+)?(?:filtros?|prote[cç][oõ]es|restri[cç][oõ]es|regras?\s+de\s+seguran[cç]a)\b/i,
+]
+
+// Paraphrase semantica (reescrita que escapa do imperativo apertado). EN+PT.
+const PARAPHRASE_PATTERNS = [
+  /\bset\s+aside\s+(?:the\s+)?(?:directions?|instructions?|rules?|guidelines?)\b/i,
+  /\b(?:the\s+)?(?:rules?|instructions?|directions?|guidelines?)\s+(?:above|earlier|given\s+(?:to\s+you\s+)?(?:earlier|before))\s+(?:no\s+longer\s+apply|don'?t\s+apply|are\s+(?:void|cancell?ed|no\s+longer\s+valid))\b/i,
+  /\bas\s+(?:regras?|instru[cç][oõ]es|ordens)\s+acima\s+n[aã]o\s+valem\s+mais\b/i,
+  /\b(?:deixe\s+de\s+lado|esque[cç]a)\s+(?:as\s+)?(?:instru[cç][oõ]es|regras|ordens)\s+(?:que\s+(?:voc[eê]\s+)?recebeu|anteriores)\b/i,
+]
+
+// Fiction/hypothetical framing usado pra burlar (so vira ataque junto com liberacao/ignore-safety).
+const FICTION_SIGNAL = /\b(?:for\s+a\s+(?:fiction|story|novel|game|screenplay|roleplay)|in\s+a\s+(?:fictional|hypothetical)\s+(?:story|scenario|world)|hypothetically\s+speaking|write\s+as\s+a\s+character\s+who)\b/i
+
+// Grandma-exploit (persona social-eng pra extrair segredo/chave).
+const GRANDMA_PATTERN = /\b(?:grandma|grandmother|grandmom|deceased\s+\w+)\b[\s\S]{0,80}\b(?:activation\s+keys?|product\s+keys?|passwords?|serial\s+(?:keys?|numbers?)|license\s+keys?)\b/i
+
+// Exfil via markdown image/link com query (canal de vazamento agentico 2026).
+const MARKDOWN_EXFIL_PATTERN = /!?\[[^\]]*\]\(\s*https?:\/\/[^)\s]+\?[^)\s]*(?:\b(?:d|data|q|c|s|prompt|secret|token|key|content)\b\s*=|paste_)/i
+
 module.exports = {
   INJECTION_PATTERNS,
   POLICY_PUPPETRY_PATTERNS,
@@ -77,4 +143,15 @@ module.exports = {
   EXFIL_LEAK_VERB,
   EXFIL_SECRET_OBJ,
   EXFIL_EXTERNAL_DEST,
+  JAILBREAK_PATTERNS,
+  NO_RULES_SIGNAL,
+  ROLE_LEAD_SIGNAL,
+  DEV_MODE_SIGNAL,
+  REFUSAL_PATTERNS,
+  EXTRACTION_PATTERNS,
+  SAFETY_BYPASS_PATTERNS,
+  PARAPHRASE_PATTERNS,
+  FICTION_SIGNAL,
+  GRANDMA_PATTERN,
+  MARKDOWN_EXFIL_PATTERN,
 }

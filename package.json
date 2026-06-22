@@ -1,6 +1,6 @@
 {
   "name": "agent-injection-firewall",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic prompt-injection / poison / tool-poisoning firewall for LLM agents — multilingual, evasion-resistant, zero black-box ML in the hot path. OWASP LLM01 / MITRE ATLAS.",
   "main": "src/index.js",
   "type": "commonjs",

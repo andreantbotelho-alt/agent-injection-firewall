@@ -90,6 +90,23 @@ function decodeEncoded(text) {
       } catch { /* not valid base64 */ }
     }
   }
+  // hex strings (>=16 hex chars) -> ascii (ex: "69676e6f7265..." = "ignore...")
+  for (const tok of (raw.match(/\b(?:[0-9a-fA-F]{2}){8,}\b/g) || [])) {
+    try { const dec = Buffer.from(tok, 'hex').toString('utf8'); if (/[a-z]{4,}/i.test(dec)) push(dec) } catch { /* nao e hex */ }
+  }
+  // percent / URL-encode (%69%67...)
+  if (/%[0-9a-fA-F]{2}/.test(raw)) { try { push(decodeURIComponent(raw.replace(/%(?![0-9a-fA-F]{2})/g, '%25'))) } catch { /* invalido */ } }
+  // HTML numeric entities (&#105; / &#x69;)
+  if (/&#x?[0-9a-fA-F]+;/i.test(raw)) {
+    try {
+      push(raw.replace(/&#x([0-9a-fA-F]+);/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+              .replace(/&#(\d+);/g, (_m, n) => String.fromCodePoint(parseInt(n, 10))))
+    } catch { /* fora de faixa */ }
+  }
+  // \uXXXX unicode-escape
+  if (/\\u[0-9a-fA-F]{4}/i.test(raw)) {
+    try { push(raw.replace(/\\u([0-9a-fA-F]{4})/gi, (_m, h) => String.fromCodePoint(parseInt(h, 16)))) } catch { /* invalido */ }
+  }
   push(rot13(raw))
   return out
 }
