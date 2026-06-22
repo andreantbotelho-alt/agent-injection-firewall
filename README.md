@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/agent-injection-firewall.svg)](https://www.npmjs.com/package/agent-injection-firewall)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![tests](https://img.shields.io/badge/tests-13%20passing-brightgreen.svg)](test)
+[![tests](https://img.shields.io/badge/tests-15%20passing-brightgreen.svg)](test)
 
 **Deterministic prompt-injection / poison / tool-poisoning firewall for LLM agents.**
 Multilingual (8 languages), evasion-resistant (leetspeak, homoglyph, invisible-unicode, base64/rot13),
